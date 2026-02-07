@@ -3,7 +3,7 @@ import { type ApiConfig } from "../config";
 import { file, spawn, write, type BunRequest } from "bun";
 import { BadRequestError, UserForbiddenError } from "./errors";
 import { getBearerToken, validateJWT } from "../auth";
-import { getVideo, updateVideo } from "../db/videos";
+import { getVideo, updateVideo, type Video } from "../db/videos";
 import { join } from "path";
 import { tmpdir } from "os";
 import { randomBytes } from "crypto";
@@ -26,10 +26,15 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest<":video
   const key = `${await getVideoAspectRatio(processedPath)}/${fname}`;
   await cfg.s3Client.file(key).write(processedFile, { type: fdVideo.type });
   await processedFile.delete();
-  video.videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${key}`;
-  updateVideo(cfg.db, video);
-  return respondWithJSON(200, null);
+  const videoWithURL = Object.assign({}, video, { videoURL: key });
+  updateVideo(cfg.db, videoWithURL);
+  return respondWithJSON(200, dbVideoToSignedVideo(cfg, videoWithURL));
 }
+
+export const generatePresignedURL = (cfg: ApiConfig, key: string, expiresIn: number) => cfg.s3Client.presign(key, { expiresIn });
+
+const PRESIGNED_TIME = 24 * 60 * 60; // 1 day
+export const dbVideoToSignedVideo = (cfg: ApiConfig, video: Video): Video => video.videoURL ? { ...video, videoURL: generatePresignedURL(cfg, video.videoURL, PRESIGNED_TIME) } : video;
 
 type FFProbe = {
   programs: [];
