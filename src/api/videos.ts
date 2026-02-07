@@ -26,15 +26,10 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest<":video
   const key = `${await getVideoAspectRatio(processedPath)}/${fname}`;
   await cfg.s3Client.file(key).write(processedFile, { type: fdVideo.type });
   await processedFile.delete();
-  const videoWithURL = Object.assign({}, video, { videoURL: key });
+  const videoWithURL = Object.assign({}, video, { videoURL: `${cfg.s3CfDistribution}${key}` });
   updateVideo(cfg.db, videoWithURL);
-  return respondWithJSON(200, dbVideoToSignedVideo(cfg, videoWithURL));
+  return respondWithJSON(200, videoWithURL);
 }
-
-export const generatePresignedURL = (cfg: ApiConfig, key: string, expiresIn: number) => cfg.s3Client.presign(key, { expiresIn });
-
-const PRESIGNED_TIME = 24 * 60 * 60; // 1 day
-export const dbVideoToSignedVideo = (cfg: ApiConfig, video: Video): Video => video.videoURL ? { ...video, videoURL: generatePresignedURL(cfg, video.videoURL, PRESIGNED_TIME) } : video;
 
 type FFProbe = {
   programs: [];
