@@ -24,6 +24,7 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   if (thumbnail.size > MAX_UPLOAD_SIZE) throw new BadRequestError("bad thumbnail size");
   const video = getVideo(cfg.db, videoId);
   if (userID !== video?.userID) throw new UserForbiddenError("bad user");
+  if (!["image/jpeg", "image/png"].includes(thumbnail.type)) throw new BadRequestError("bad thumbnail type");
   const fname = `${video.id}.${extension(thumbnail.type)}`;
   await write(join(cfg.assetsRoot, fname), await thumbnail.bytes());
   video.thumbnailURL = `http://localhost:${cfg.port}/${cfg.assetsRoot}/${fname}`;
