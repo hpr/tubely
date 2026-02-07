@@ -6,6 +6,7 @@ import { write, type BunRequest } from "bun";
 import { BadRequestError, UserForbiddenError } from "./errors";
 import { join } from "path";
 import { extension } from "mime-types";
+import { randomBytes } from "crypto";
 
 export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   const MAX_UPLOAD_SIZE = 10 << 20; // 10 MB
@@ -25,7 +26,7 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   const video = getVideo(cfg.db, videoId);
   if (userID !== video?.userID) throw new UserForbiddenError("bad user");
   if (!["image/jpeg", "image/png"].includes(thumbnail.type)) throw new BadRequestError("bad thumbnail type");
-  const fname = `${video.id}.${extension(thumbnail.type)}`;
+  const fname = `${randomBytes(32).toString("base64url")}.${extension(thumbnail.type)}`;
   await write(join(cfg.assetsRoot, fname), await thumbnail.bytes());
   video.thumbnailURL = `http://localhost:${cfg.port}/${cfg.assetsRoot}/${fname}`;
   updateVideo(cfg.db, video);
