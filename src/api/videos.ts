@@ -1,6 +1,6 @@
 import { respondWithJSON } from "./json";
 import { type ApiConfig } from "../config";
-import { file, write, type BunRequest } from "bun";
+import { file, spawn, write, type BunRequest } from "bun";
 import { BadRequestError, UserForbiddenError } from "./errors";
 import { getBearerToken, validateJWT } from "../auth";
 import { getVideo, updateVideo } from "../db/videos";
@@ -21,9 +21,32 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest<":video
   const tmpPath = join(tmpdir(), fname);
   await write(tmpPath, await fdVideo.bytes());
   const tmpFile = file(tmpPath);
-  await cfg.s3Client.file(fname).write(tmpFile, { type: fdVideo.type });
+  const key = `${await getVideoAspectRatio(tmpPath)}/${fname}`;
+  await cfg.s3Client.file(key).write(tmpFile, { type: fdVideo.type });
   await tmpFile.delete();
-  video.videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${fname}`;
+  video.videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${key}`;
   updateVideo(cfg.db, video);
   return respondWithJSON(200, null);
+}
+
+type FFProbe = {
+  programs: [];
+  stream_groups: [];
+  streams: {
+    width: number;
+    height: number;
+  }[];
+};
+
+export async function getVideoAspectRatio(filePath: string) {
+  const proc = spawn(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "json", filePath], {
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+  if (await proc.exited !== 0) throw Error(await new Response(proc.stderr).text());
+  const { streams }: FFProbe = JSON.parse(await new Response(proc.stdout).text());
+  return ({
+    1: "landscape",
+    0: "portrait",
+  } as const)[Math.floor(streams[0].width / streams[0].height)] ?? "other";
 }
