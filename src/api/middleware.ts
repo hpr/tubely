@@ -8,10 +8,10 @@ import {
 } from "./errors";
 import { respondWithJSON } from "./json";
 
-type HandlerWithConfig = (cfg: ApiConfig, req: BunRequest) => Promise<Response>;
+type HandlerWithConfig<Path extends string = string> = (cfg: ApiConfig, req: BunRequest<Path>) => Promise<Response>;
 
-export function withConfig(cfg: ApiConfig, handler: HandlerWithConfig) {
-  return (req: BunRequest) => handler(cfg, req);
+export function withConfig<Path extends string>(cfg: ApiConfig, handler: HandlerWithConfig<Path>) {
+  return (req: BunRequest<Path>) => handler(cfg, req);
 }
 
 export function noCacheMiddleware(
