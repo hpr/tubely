@@ -20,10 +20,12 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest<":video
   const fname = `${randomBytes(32).toString("base64url")}.mp4`;
   const tmpPath = join(tmpdir(), fname);
   await write(tmpPath, await fdVideo.bytes());
-  const tmpFile = file(tmpPath);
-  const key = `${await getVideoAspectRatio(tmpPath)}/${fname}`;
-  await cfg.s3Client.file(key).write(tmpFile, { type: fdVideo.type });
-  await tmpFile.delete();
+  const processedPath = await processVideoForFastStart(tmpPath);
+  await file(tmpPath).delete();
+  const processedFile = file(processedPath);
+  const key = `${await getVideoAspectRatio(processedPath)}/${fname}`;
+  await cfg.s3Client.file(key).write(processedFile, { type: fdVideo.type });
+  await processedFile.delete();
   video.videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${key}`;
   updateVideo(cfg.db, video);
   return respondWithJSON(200, null);
@@ -49,4 +51,11 @@ export async function getVideoAspectRatio(filePath: string) {
     1: "landscape",
     0: "portrait",
   } as const)[Math.floor(streams[0].width / streams[0].height)] ?? "other";
+}
+
+export async function processVideoForFastStart(filePath: string) {
+  const fname = `${filePath}.processed`;
+  const proc = spawn(["ffmpeg", "-i", filePath, "-movflags", "faststart", "-map_metadata", "0", "-codec", "copy", "-f", "mp4", fname]);
+  if (await proc.exited !== 0) throw Error(await new Response(proc.stderr).text());
+  return fname;
 }
